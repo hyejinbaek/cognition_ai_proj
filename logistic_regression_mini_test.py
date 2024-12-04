@@ -1,3 +1,6 @@
+# logistic regression machine learning model
+# 원본 데이터에서 요청 사유, 상태 카테고리 기준으로 미니 테스트 진행
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
