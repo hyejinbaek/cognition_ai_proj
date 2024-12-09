@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오토앤 Shiftee 이석사유 AI판별 서비스</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            width: 80%;
+            max-width: 400px;
+        }
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        select, textarea {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            font-size: 1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>오토앤 Shiftee 이석사유 <br> AI판별 서비스 <br/></h1>
+        <form method="post">
+            <label for="request_type">요청 종류:</label>
+            <select id="request_type" name="request_type" required>
+                <option value="(비업무)개인시간_흡연 등 (휴게 O)">(비업무)개인시간_흡연 등 (휴게 O)</option>
+                <option value="(업무)회의 (휴게 X)">(업무)회의 (휴게 X)</option>
+                <option value="(업무)기타업무 (휴게 X)">(업무)기타업무 (휴게 X)</option>
+                <option value="(업무)출장,이동,외근 (휴게 X)">(업무)출장,이동,외근 (휴게 X)</option>
+            </select><br>
+
+            <label for="request_reason">요청 사유:</label>
+            <textarea id="request_reason" name="request_reason" rows="4" required></textarea><br>
+
+            <input type="submit" value="판단 요청">
+        </form>
+
+        {% if decision %}
+        <h2>판단 결과:</h2>
+        <p>{{ decision }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>
