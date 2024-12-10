@@ -44,6 +44,11 @@
             color: white;
             font-size: 1em;
         }
+        .example {
+            font-size: 0.9em;
+            color: #555;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -59,7 +64,8 @@
             </select><br>
 
             <label for="request_reason">요청 사유:</label>
-            <textarea id="request_reason" name="request_reason" rows="4" required></textarea><br>
+            <div class="example">예시 : 팀장과의 우드룸에서 oo프로젝트 관련 논의(장소, 내용, 참석자 명확히 작성)</div>
+            <textarea id="request_reason" name="request_reason" rows="4" placeholder="요청 사유를 입력하세요." required></textarea><br>
 
             <input type="submit" value="판단 요청">
         </form>
