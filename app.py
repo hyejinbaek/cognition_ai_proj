@@ -1,3 +1,5 @@
+# 서버용 api 버전
+
 from flask import Flask, request, render_template
 import openai
 import os
@@ -12,20 +14,29 @@ app = Flask(__name__)
 
 def request_decision(request_type, request_reason):
     messages = [
-        {"role": "system", "content": "당신은 승인 또는 거절을 판단하는 어시스턴트입니다."},
+        {"role": "system", "content": "당신은 직원 요청 승인 시스템으로, 요청 정보를 기반으로 승인 또는 거절을 판단합니다."},
         {
             "role": "user",
             "content": (
-                "다음 입력 데이터를 보고 승인 또는 거절을 판단하세요.\n\n"
-                "조건:\n"
-                "- (업무)회의: 회의실 장소, 내용, 참석자가 모두 포함되면 승인, 그렇지 않으면 거절.\n"
-                "- (업무)기타업무: 사유가 명확하면 승인, 그렇지 않으면 거절.\n\n"
-                "예를 들어, 요청 종류가 (업무)출장,이동,외근 일 경우 2024 오토살롱위크 박람회 외근 라고 요청 사유를 작성했을 때 팀즈 공지 참고 후 전자결재 문서 번호 및 사유를 기입하지 않아서 거절이다."
-                "즉, 요청 사유에 (업무)출장,이동,외근일 경우 외근 신청서 문서번호가 있어야 승인된다."
-                "예를 들어, 요청 종류가 (업무)회의일 경우, 요청 사유가 1층 샘플 수령, 샘플 확인이라고 입력했을 때 기타 업무로 재요청 혹은 회의내용/회의장소/참석자를 포함하지 않았기 때문에 거절이다."
-                f"요청 종류: {request_type}\n"
-                f"요청 사유: {request_reason}\n\n"
-                "결론:"
+                "다음 요청 정보를 기반으로 승인을 결정하세요. \n\n"
+                "승인 조건:\n"
+                "1. (업무)회의 (휴게 X):\n"
+                "   - 요청 사유에 회의실 장소, 내용, 참석자가 모두 포함되어야 승인.\n"
+                "   - 하나라도 빠지면 거절.\n\n"
+                "2. (비업무)개인시간_흡연 등 (휴게 O):\n"
+                "   - 요청 사유가 '흡연', '화장실', '편의점', '카페' 등 개인적인 이유이면 승인.\n"
+                "   - 다른 유형의 요청 또는 카테고리가 맞지 않을 시 거절.\n\n"
+                "3. (업무)기타업무 (휴게 X):\n"
+                "   - 요청 사유가 명확하게 설명될 경우 승인.\n"
+                "   - 명확하지 않을 경우 거절.\n\n"
+                "4. (업무)출장, 이동, 외근 (휴게 X):\n"
+                "   - 요청 사유에 장소와 내용이 명시되어 있어야 승인.\n"
+                "   - 명시되지 않으면 거절.\n"
+                "   - 외근 신청서 문서번호는 'AUTON'으로 시작하고 연속되는 숫자가 포함되어야 승인.\n"
+                "   - 예) AUTON20240101\n\n"
+                f"요청 종류: `{request_type}`\n"
+                f"요청 사유: `{request_reason}`\n\n"
+                "결정:"
             )
         }
     ]
@@ -39,7 +50,7 @@ def request_decision(request_type, request_reason):
         return response['choices'][0]['message']['content'].strip()
     except Exception as e:
         return f"오류: {e}"
-
+    
 def save_to_excel(request_type, request_reason, decision):
     filename = "user_requests.xlsx"
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
