@@ -30,7 +30,7 @@ fine_tune_job = openai.FineTuningJob.create(
     hyperparameters={
         "n_epochs": 4,
     },
-    model = "gpt-4o-2024-08-06"
+    model = "gpt-3.5-turbo-1106"
 )
 
 # Retrieve and print logs periodically
