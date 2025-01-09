@@ -11,10 +11,11 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__)
+fine_tuned_model = 'ft:gpt-3.5-turbo-1106:auton::AnKA31K3'
 
 def request_decision(request_type, request_reason):
     messages = [
-        {"role": "system", "content": "당신은 직원 요청 승인 시스템으로, 요청 정보를 바탕으로 승인, 거절, 보류 중 하나를 판단합니다."},
+        {"role": "system", "content": "당신은 직원 요청 승인 시스템으로, 요청 정보를 바탕으로 승인, 거절, 보류 중 하나를 판단합니다. 또한, 거절할 시 거절사유도 함께 설명해주어야 합니다."},
         {
             "role": "user",
             "content": (
@@ -69,7 +70,7 @@ def request_decision(request_type, request_reason):
 
     try:
         response = openai.ChatCompletion.create(
-            model='gpt-3.5-turbo',
+            model=fine_tuned_model,
             messages=messages,
             max_tokens=150,
             temperature=0
