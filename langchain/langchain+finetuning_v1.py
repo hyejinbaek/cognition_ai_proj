@@ -22,7 +22,8 @@ app = Flask(__name__)
 load_dotenv()
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 openai_api_key = os.getenv("OPENAI_API_KEY")
-fine_tuned_model = 'ft:gpt-3.5-turbo-1106:auton::AnKA31K3'
+# fine_tuned_model = 'ft:gpt-3.5-turbo-1106:auton::AnKA31K3'
+fine_tuned_model = 'gpt-4o-mini'
 
 # LangChain을 통한 모델 설정
 llm = ChatOpenAI(model=fine_tuned_model, temperature=0)
@@ -57,11 +58,11 @@ prompt_template = """
 주어진 아래의 내용을 바탕으로 요청 상태와 요청 사유가 일치해야합니다.
 
 1. (비업무)개인시간_흡연 등
-    - 승인 : 요청 사유가 흡연, 화장실, 담배, 티타임 등 명확한 개인적인 이유일 경우
+    - 승인 : 요청 사유가 업무 외의 모든 사항 가능
     - 거절 : 개인시간이 아닌 업무적 사유일 경우(거절 사유 설명 필요)
 2. (업무)회의
     - 승인 : 회의내용, 장소, 참석자가 모두 명확히 포함되어 있을 경우
-    - 거절 : 회의내용, 장소, 참석자가 누락되거나 불명확한 경우(거절 사유 설명 필요)
+    - 거절 : 회의내용, 장소, 참석자가 누락되는 경우(거절 사유 설명 필요)
     - 보류 : 요청 정보가 명백히 불충분하여 승인 또는 거절 여부를 판단할 수 없는 경우(예: 요청 사유가 단어 하나로만 이루어진 경우)
 3. (업무)기타업무
     - 승인 : 요청 사유가 구체적이고 명확히 설명된 경우(예 : 거래처 자료 전달)
@@ -71,6 +72,9 @@ prompt_template = """
     - 승인 : 요청 사유에 출장 및 외근 장소와 내용이 명시되어 있어야 함. 또한 문서번호가 'AUTON'으로 시작하며 숫자가 포함되어 있을 경우
     - 거절 : 장소와 내용이 하나라도 명시되지 않거나 문서번호 형식이 맞지 않을 경우(거절 사유 설명 필요)
     - 보류 : 요청 정보가 불충분하여 판단하기 명백히 어려운 경우
+    
+참고로 회의실 종류에는 '3층', '1층', '2층', '4층', '5층', '로지', 'ROSY', 'CLOVER', '클로버', '우드', 'WOOD', '오션', 'OCEAN' 등 층수 또는 명사형으로 되어있다.
+참고로 회의 참석자에는 사람 이름(예시 : 이승재 등), 직급(팀장, 이사, 대표 등)이 등장한다.
 
 요청 종류: `{request_type}`
 요청 사유: `{request_reason}`
@@ -78,6 +82,9 @@ prompt_template = """
 결정을 다음 중 하나로 작성하세요: '승인', '거절', '보류'.
 결정:
 """
+
+
+
 
 prompt = PromptTemplate(input_variables=["request_type", "request_reason"], template=prompt_template)
 # chain = LLMChain(llm=llm, prompt=prompt)
