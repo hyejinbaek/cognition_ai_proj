@@ -16,6 +16,7 @@ import pandas as pd
 import threading
 from flask import Flask, request, render_template
 from langchain.chains import LLMChain
+from langchain.schema import RunnableSequence
 
 app = Flask(__name__)
 
@@ -52,37 +53,21 @@ else:
 
 # 메시지 및 규칙을 템플릿으로 정의
 prompt_template = """
-당신은 직원 요청 승인 시스템으로, 요청 정보와 요청 사유를 바탕으로 승인, 거절, 보류 중 하나를 판단합니다. 
-또한, 필수적으로 거절사유도 함께 설명해주어야 합니다.
+당신은 직원 요청 승인 시스템입니다. 요청 정보와 요청 사유를 바탕으로 승인, 거절, 보류 중 하나를 판단합니다.
+아래 문서의 정보를 참고하여 요청을 판단하세요:
 
-주어진 아래의 내용을 바탕으로 요청 상태와 요청 사유가 일치해야합니다.
+### 문서 정보
+{context}
 
-1. (비업무)개인시간_흡연 등
-    - 승인 : 요청 사유가 업무 외의 모든 사항 가능
-    - 거절 : 개인시간이 아닌 업무적 사유일 경우(거절 사유 설명 필요)
-2. (업무)회의
-    - 승인 : 회의내용, 장소, 참석자가 모두 명확히 포함되어 있을 경우
-    - 거절 : 회의내용, 장소, 참석자가 누락되는 경우(거절 사유 설명 필요)
-    - 보류 : 요청 정보가 명백히 불충분하여 승인 또는 거절 여부를 판단할 수 없는 경우(예: 요청 사유가 단어 하나로만 이루어진 경우)
-3. (업무)기타업무
-    - 승인 : 요청 사유가 구체적이고 명확히 설명된 경우(예 : 거래처 자료 전달)
-    - 거절 : 요청 종류와 요청 사유가 일치하지 않는 경우(우드룸에서 프로젝트 관련 팀장님과 회의)(거절 사유 설명 필요)
-    - 보류 : 요청 사유가 매우 짧거나 모호하여 추가 정보가 없으면 판단이 불가능한 경우
-4. (업무)출장,이동,외근
-    - 승인 : 요청 사유에 출장 및 외근 장소와 내용이 명시되어 있어야 함. 또한 문서번호가 'AUTON'으로 시작하며 숫자가 포함되어 있을 경우
-    - 거절 : 장소와 내용이 하나라도 명시되지 않거나 문서번호 형식이 맞지 않을 경우(거절 사유 설명 필요)
-    - 보류 : 요청 정보가 불충분하여 판단하기 명백히 어려운 경우
-    
-참고로 회의실 종류에는 '3층', '1층', '2층', '4층', '5층', '로지', 'ROSY', 'CLOVER', '클로버', '우드', 'WOOD', '오션', 'OCEAN' 등 층수 또는 명사형으로 되어있다.
-참고로 회의 참석자에는 사람 이름(예시 : 이승재 등), 직급(팀장, 이사, 대표 등)이 등장한다.
-
-요청 종류: `{request_type}`
-요청 사유: `{request_reason}`
+### 요청 세부사항
+요청 종류: {request_type}
+요청 사유: {request_reason}
 
 결정을 다음 중 하나로 작성하세요: '승인', '거절', '보류'.
-결정:
-"""
+또한, 결정을 내린 이유를 간단히 설명하세요.
 
+결정 및 이유:
+"""
 
 
 
@@ -90,37 +75,51 @@ prompt = PromptTemplate(input_variables=["request_type", "request_reason"], temp
 # chain = LLMChain(llm=llm, prompt=prompt)
 
 retriever = vectorstore.as_retriever(k=3)
-chain = (
-    retriever | prompt | llm | StrOutputParser()
-)
+# chain = (
+#     retriever | prompt | llm | StrOutputParser()
+# )
+chain = RunnableSequence([retriever, prompt, llm, StrOutputParser()])
 
 
-def request_decision(request_type, request_reason):
-    # 벡터 저장소에서 관련 문서 검색
-    search_results = vectorstore.similarity_search(request_reason, k=3)  # k는 검색할 문서의 수
+# def request_decision(request_type, request_reason):
+#     # 벡터 저장소에서 관련 문서 검색
+#     search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')  # k는 검색할 문서의 수
     
-    # 검색된 문서들로 텍스트 조합
+#     # 검색된 문서들로 텍스트 조합
+#     context = "\n".join([result.page_content for result in search_results])
+    
+#     # 입력 데이터는 반드시 dict 형태여야 합니다.
+#     input_data = {
+#         "request_type": request_type,
+#         "request_reason": request_reason,
+#         "context": context
+#     }
+    
+#     # 템플릿에 맞는 형태로 입력 데이터를 구성
+#     prompt_text = prompt.format(**input_data)  # 여러 입력값을 dict 형태로 전달
+
+#     # LLMChain을 사용하여 텍스트를 chain에 전달
+#     chain = LLMChain(llm=llm, prompt=prompt)  # LLMChain을 별도로 생성하여 사용
+
+#     # 의사결정을 생성합니다.
+#     decision = chain.run(input_data)  # chain.run을 사용하여 직접 dict 데이터를 전달합니다.
+    
+#     return decision.strip()
+def request_decision(request_type, request_reason):
+    # 벡터 스토어에서 유사한 문서 검색
+    search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')
     context = "\n".join([result.page_content for result in search_results])
     
-    # 입력 데이터는 반드시 dict 형태여야 합니다.
+    # 입력 데이터 구성
     input_data = {
         "request_type": request_type,
         "request_reason": request_reason,
         "context": context
     }
     
-    # 템플릿에 맞는 형태로 입력 데이터를 구성
-    prompt_text = prompt.format(**input_data)  # 여러 입력값을 dict 형태로 전달
-
-    # LLMChain을 사용하여 텍스트를 chain에 전달
-    chain = LLMChain(llm=llm, prompt=prompt)  # LLMChain을 별도로 생성하여 사용
-
-    # 의사결정을 생성합니다.
-    decision = chain.run(input_data)  # chain.run을 사용하여 직접 dict 데이터를 전달합니다.
-    
+    # invoke를 사용하여 결과 생성
+    decision = chain.invoke(input_data)
     return decision.strip()
-
-
 
 
 def save_to_excel(request_type, request_reason, decision):
