@@ -77,24 +77,7 @@ def split_request_detail(request_detail):
         return request_detail.split('/')[-1].strip()
     return request_detail
 
-# def request_decision(request_type, request_reason):
-#     search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')
-#     context = "\n".join([result.page_content for result in search_results])
-#     input_data = {
-#         "request_type": request_type,
-#         "request_reason": request_reason,
-#         "context": context
-#     }
-#     # RunnableSequence 사용
-#     chain = prompt | llm  
-#     decision = chain.invoke(input_data)
-    
-#     # 디버깅을 위해 결정 결과를 콘솔에 출력
-#     print("Raw decision output:", decision)
-    
-#     # AIMessage 객체의 content 속성에서 텍스트 추출
-#     decision_text = decision.content.strip()  
-#     return decision_text
+
 # request_decision 함수를 수정하여 요청사유의 첫 번째 요소만 사용하도록 수정합니다.
 def request_decision(request_type, request_reason):
     search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')
@@ -175,31 +158,15 @@ try:
     for row in table_rows:
         row_id = row.find_element(By.CSS_SELECTOR, "input.sft-table-row-checkbox").get_attribute("sft-data-table-row-id")
         
-        # # request_detail_element 변수가 요청사항
-        # request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
-        # driver.execute_script("arguments[0].click();", request_detail_element)
-
-        # popup = WebDriverWait(driver, 10).until(
-        #     EC.presence_of_element_located((By.CSS_SELECTOR, "div.sft-middle-item"))
-        # )
-
-        # reason_elements = WebDriverWait(popup, 10).until(
-        #     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
-        # )
-
-        # request_reason = [
-        #     element.text.strip()
-        #     for element in reason_elements
-        #     if element.is_displayed() and element.text.strip()
-        # ]
+        
         request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
         request_details = request_detail_element.text.strip()
         request_parts = split_request_detail(request_details)  # 분리된 요청사항
-        print("***************** ", request_parts)
+        
 
         if len(request_parts) > 0:
             request_type = split_request_detail(request_details)  # 요청 종류 추출
-            print("!1!!!!!!!!!!!!!!!! request_type === ", request_type)
+            
             driver.execute_script("arguments[0].click();", request_detail_element)
 
             popup = WebDriverWait(driver, 10).until(
@@ -229,7 +196,6 @@ try:
                 for element in reason_elements
                 if element.is_displayed() and element.text.strip()
             ]
-            print("!1!!!!!!!!!!!!!!!! request_reason === ", request_reason)
 
         # if request_reason:
         #     decision = request_decision('PC 사용기록', request_reason[0])
