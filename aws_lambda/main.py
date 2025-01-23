@@ -37,6 +37,9 @@ if os.path.exists(vectorstore_path):
 else: 
     raise ValueError("Error :: 벡터 스토어 생성 필요")
 
+# 결과를 저장할 데이터프레임 초기화
+results_df = pd.DataFrame(columns=["Row ID", "요청사유", "결정", "거절 사유"])
+
 # 프롬프트 템플릿 설정
 prompt_template = """
 당신은 직원 요청 승인 시스템입니다. 요청 종류와 요청 사유를 바탕으로 승인, 거절, 보류 중 하나를 판단합니다. 아래 정보를 참고하여 요청을 판단하세요:
@@ -68,6 +71,31 @@ prompt_template = """
 prompt = PromptTemplate(input_variables=["request_type", "request_reason"], template=prompt_template)
 retriever = vectorstore.as_retriever(k=3)
 
+# 요청사항을 '/' 기준으로 분리하는 함수
+def split_request_detail(request_detail):
+    if '/' in request_detail:
+        return request_detail.split('/')[-1].strip()
+    return request_detail
+
+# def request_decision(request_type, request_reason):
+#     search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')
+#     context = "\n".join([result.page_content for result in search_results])
+#     input_data = {
+#         "request_type": request_type,
+#         "request_reason": request_reason,
+#         "context": context
+#     }
+#     # RunnableSequence 사용
+#     chain = prompt | llm  
+#     decision = chain.invoke(input_data)
+    
+#     # 디버깅을 위해 결정 결과를 콘솔에 출력
+#     print("Raw decision output:", decision)
+    
+#     # AIMessage 객체의 content 속성에서 텍스트 추출
+#     decision_text = decision.content.strip()  
+#     return decision_text
+# request_decision 함수를 수정하여 요청사유의 첫 번째 요소만 사용하도록 수정합니다.
 def request_decision(request_type, request_reason):
     search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')
     context = "\n".join([result.page_content for result in search_results])
@@ -76,14 +104,9 @@ def request_decision(request_type, request_reason):
         "request_reason": request_reason,
         "context": context
     }
-    # RunnableSequence 사용
     chain = prompt | llm  
     decision = chain.invoke(input_data)
-    
-    # 디버깅을 위해 결정 결과를 콘솔에 출력
     print("Raw decision output:", decision)
-    
-    # AIMessage 객체의 content 속성에서 텍스트 추출
     decision_text = decision.content.strip()  
     return decision_text
 
@@ -137,7 +160,7 @@ try:
     checkboxes = dropdown_menu.find_elements(By.CSS_SELECTOR, "li.dropdown-item") 
     for checkbox in checkboxes: 
         label = checkbox.find_element(By.TAG_NAME, "span").text 
-        if label in ["PC 사용기록"]: 
+        if label in ["PC 사용기록"]:
             checkbox_input = checkbox.find_element(By.CSS_SELECTOR, "div.sft-container > div") 
             if "sft-selected" not in checkbox_input.get_attribute("class"): 
                 checkbox.click() 
@@ -151,34 +174,104 @@ try:
     ) 
     for row in table_rows:
         row_id = row.find_element(By.CSS_SELECTOR, "input.sft-table-row-checkbox").get_attribute("sft-data-table-row-id")
-        request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
-        driver.execute_script("arguments[0].click();", request_detail_element)
-
-        popup = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.sft-middle-item"))
-        )
-
-        reason_elements = WebDriverWait(popup, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
-        )
-
-        request_reason = [
-            element.text.strip()
-            for element in reason_elements
-            if element.is_displayed() and element.text.strip()
-        ] 
         
-        if request_reason:
-            decision = request_decision('PC 사용기록', request_reason[0])
-            print(f"Row ID: {row_id}, 요청사유: {request_reason[0]}, 결정 및 사유: {decision}")
+        # # request_detail_element 변수가 요청사항
+        # request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
+        # driver.execute_script("arguments[0].click();", request_detail_element)
+
+        # popup = WebDriverWait(driver, 10).until(
+        #     EC.presence_of_element_located((By.CSS_SELECTOR, "div.sft-middle-item"))
+        # )
+
+        # reason_elements = WebDriverWait(popup, 10).until(
+        #     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
+        # )
+
+        # request_reason = [
+        #     element.text.strip()
+        #     for element in reason_elements
+        #     if element.is_displayed() and element.text.strip()
+        # ]
+        request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
+        request_details = request_detail_element.text.strip()
+        request_parts = split_request_detail(request_details)  # 분리된 요청사항
+        print("***************** ", request_parts)
+
+        if len(request_parts) > 0:
+            request_type = split_request_detail(request_details)  # 요청 종류 추출
+            print("!1!!!!!!!!!!!!!!!! request_type === ", request_type)
+            driver.execute_script("arguments[0].click();", request_detail_element)
+
+            popup = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div.sft-middle-item"))
+            )
+
+            reason_elements = WebDriverWait(popup, 10).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
+            )
             
+            # 전체보기 버튼이 있다면 클릭
             try:
-                decision_type_line = next(line for line in decision.split('\n') if line.startswith('결정:'))
-                decision_type = decision_type_line.split('결정: ')[1].strip()
-                print(" === 요청사유 결과(승인/거절) : ", decision_type)
-            except StopIteration:
-                print(f"결정 형식을 찾을 수 없습니다. 결과: {decision}")
-                decision_type = "보류"
+                view_all_button = popup.find_element(By.CLASS_NAME, "sft-view-all-button")
+                if view_all_button.is_displayed():
+                    view_all_button.click()
+                    print("전체보기 버튼 클릭됨")
+            except Exception as e:
+                print("전체보기 버튼이 존재하지 않거나 클릭할 수 없음:", e)
+
+            # 변경된 request_reason 추출
+            reason_elements = WebDriverWait(popup, 10).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
+            )
+
+            request_reason = [
+                element.text.strip()
+                for element in reason_elements
+                if element.is_displayed() and element.text.strip()
+            ]
+            print("!1!!!!!!!!!!!!!!!! request_reason === ", request_reason)
+
+        # if request_reason:
+        #     decision = request_decision('PC 사용기록', request_reason[0])
+            
+        #     print(f"Row ID: {row_id}, 요청사유: {request_reason[0]}, 결정 및 사유: {decision}")
+        #     decision_df = pd.DataFrame(columns=['decision_type', 'rejection_reason'])
+        #     for index, row in decision_df.iterrows():
+        #         try:
+        #             decision_type = row['decision_type']  # DataFrame에서 승인/거절 결과 가져오기
+        #             rejection_reason = row.get('rejection_reason', '')  # DataFrame에서 거절 사유 가져오기 (없으면 빈 문자열)
+
+        #             print(f"Row {index} === 요청사유 결과(승인/거절) : {decision_type}")
+        #             if decision_type == "거절":
+        #                 print(f"거절 사유: {rejection_reason}")
+        #         except KeyError as e:
+        #             print(f"결정 형식을 찾을 수 없습니다. 에러: {e}")
+        #             decision_type = "보류"
+        if request_reason:
+            decision = request_decision(request_type, request_reason[0])
+
+            print(f"Row ID: {row_id}, 요청사유: {request_reason[0]}, 결정 및 사유: {decision}")
+            decision_type, rejection_reason = "보류", ""
+
+            if "결정: 승인" in decision:
+                decision_type = "승인"
+                print(" ==== 결정: 승인 ===== ")
+            elif "결정: 거절" in decision:
+                print(" ==== 결정: 거절 ===== ")
+                decision_type = "거절"
+                rejection_reason = decision.split("- 사유: ")[1] if "- 사유: " in decision else ""
+            
+            # DataFrame을 새로운 행으로 업데이트하려면
+            new_row = pd.DataFrame({
+                "Row ID": [row_id],
+                "요청 카테고리" : [request_parts],
+                "요청사유": [request_reason[0]],
+                "결정": [decision_type],
+                "거절 사유": [rejection_reason]
+            })
+
+            # append 대신 concat을 사용하여 추가
+            results_df = pd.concat([results_df, new_row], ignore_index=True)
 
             # if decision_type == "승인":
             #     # 승인 버튼 클릭
@@ -229,7 +322,12 @@ try:
         #     EC.element_to_be_clickable((By.CSS_SELECTOR, "button.close"))
         # )
         # close_button.click()
+    # 작업 완료 후 데이터프레임 출력
+    print("최종 결과 데이터프레임:")
+    print(results_df)
 
+    # 파일로 저장
+    results_df.to_excel("request_decision_results.xlsx", index=False)
     print("모든 작업 완료.")
 
 except TimeoutException:
