@@ -17,6 +17,11 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from datetime import datetime 
 from langchain.chains import LLMChain 
 
+os.chdir("/home/shiftee/aws_lambda")
+
+# /var/task
+# /home/shiftee/aws_lambda 
+
 # 환경 변수 로드
 load_dotenv() 
 

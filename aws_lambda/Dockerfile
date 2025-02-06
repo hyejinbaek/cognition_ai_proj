@@ -1,6 +1,12 @@
 # Lambda Python 베이스 이미지 사용
 FROM amazon/aws-lambda-python:3.12
 
+# 작업 디렉토리 설정
+WORKDIR /home/shiftee/aws_lambda
+
+# 필요한 파일 복사
+COPY . /home/shiftee/aws_lambda
+
 # Chrome 및 필수 의존성 설치
 RUN dnf install -y atk cups-libs gtk3 libXcomposite alsa-lib \
     libXcursor libXdamage libXext libXi libXrandr libXScrnSaver \
