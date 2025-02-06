@@ -11,15 +11,15 @@ import pandas as pd
 import threading
 from flask import Flask, request, render_template
 from langchain.chains import LLMChain
-
+import openai
 
 app = Flask(__name__)
 
 load_dotenv()
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 openai_api_key = os.getenv("OPENAI_API_KEY")
-fine_tuned_model = 'ft:gpt-3.5-turbo-1106:auton::AnKA31K3'
-# fine_tuned_model = 'gpt-4o-mini'
+# fine_tuned_model = 'ft:gpt-3.5-turbo-1106:auton::AnKA31K3'
+fine_tuned_model = 'gpt-4o'
 
 # LangChain을 통한 모델 설정
 llm = ChatOpenAI(model=fine_tuned_model, temperature=0)
@@ -48,27 +48,27 @@ else:
 
 # 메시지 및 규칙을 템플릿으로 정의
 prompt_template = """
-당신은 직원 요청 승인 시스템입니다. 요청 정류와 요청 사유를 바탕으로 승인, 거절, 보류 중 하나를 판단합니다.
-아래 문서의 정보와 요청 종류별 승인 조건을 바탕으로 요청을 판단하세요:
-
+당신은 직원 요청 승인 시스템입니다. 요청 종류와 요청 사유를 바탕으로 승인, 거절 중 하나를 판단합니다. 아래 정보를 참고하여 요청을 판단하세요:
 
 ### 문서 정보
 {context}
-1. 요청 종류 : (비업무)개인시간_흡연 등
-    - 승인 조건 : 업무 외 개인적인 행동 모두 승인
-2. 요청 종류 : (업무)회의
-    - 승인 조건 : 회의 장소, 내용, 참석자 모두 포함되어야 승인
-3. 요청 종류 : (업무)기타업무
-    - 승인 조건 : 요청 사유가 구체적이고 명확히 설명된 경우
-4. 요청 종류 : (업무)출장,이동,외근
-    - 승인 조건 :  요청 사유에 출장 및 외근 장소와 내용이 명시되어 있어야 함. 또한 문서번호가 'AUTON'으로 시작하며 숫자가 포함되어 있을 경우
+
+### 승인 기준:
+1. (비업무)개인시간_흡연 등 : 개인적 활동은 모두 승인.
+2. (업무)회의 : 장소, 내용, 참석자가 명확히 포함된 경우 승인. 하나라도 누락된 경우 거절.
+    - 장소는 특정 단어로 나타나며, 사내외 장소일 수 있습니다.
+    - 참석자는 사람 이름(예: 이승재 등) 또는 직급(예: 팀장, 이사, 대표)이 포함되어야 합니다.
+3. (업무)기타업무 : 요청 사유가 설명된 경우 승인.
+4. (업무)출장,이동,외근 : 출장 및 외근 장소와 내용이 명시되어 있어야 함. 또한 문서번호('AUTON')가 포함된 경우 승인.
 
 ### 요청 세부사항
 요청 종류: {request_type}
 요청 사유: {request_reason}
 
-결정을 다음 중 하나로 작성하세요: '승인', '거절', '보류'.
-또한, 결정을 내린 이유를 간단히 설명하세요.
+### 결정 형식
+결정 및 이유를 아래 형식으로 작성하세요:
+- 결정: (승인, 거절 중 하나)
+- 사유: (거절 이유를 간단히 설명)
 
 결정 및 이유:
 """
@@ -86,28 +86,32 @@ chain = (
 
 def request_decision(request_type, request_reason):
     # 벡터 저장소에서 관련 문서 검색
-    search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')  # k는 검색할 문서의 수
+    search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')
     
+    # 검색 결과 확인용 출력
+    print("검색된 문서:")
+    for i, result in enumerate(search_results):
+        print(f"문서 {i+1}:\n{result.page_content}\n")
+
     # 검색된 문서들로 텍스트 조합
     context = "\n".join([result.page_content for result in search_results])
+    print(f" ===== 생성된 context:\n{context}")
     
-    # 입력 데이터는 반드시 dict 형태여야 합니다.
+    # 나머지 로직 그대로 유지
     input_data = {
         "request_type": request_type,
         "request_reason": request_reason,
         "context": context
     }
-    
-    # 템플릿에 맞는 형태로 입력 데이터를 구성
-    prompt_text = prompt.format(**input_data)  # 여러 입력값을 dict 형태로 전달
-
-    # LLMChain을 사용하여 텍스트를 chain에 전달
-    chain = LLMChain(llm=llm, prompt=prompt)  # LLMChain을 별도로 생성하여 사용
-
-    # 의사결정을 생성합니다.
-    decision = chain.run(input_data)  # chain.run을 사용하여 직접 dict 데이터를 전달합니다.
+    prompt_text = prompt.format(**input_data)
+    chain = LLMChain(llm=llm, prompt=prompt)
+    decision = chain.run(input_data)
     
     return decision.strip()
+
+
+
+
 
 
 
