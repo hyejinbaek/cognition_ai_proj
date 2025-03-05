@@ -202,22 +202,6 @@ try:
                 if element.is_displayed() and element.text.strip()
             ]
 
-        # if request_reason:
-        #     decision = request_decision('PC 사용기록', request_reason[0])
-            
-        #     print(f"Row ID: {row_id}, 요청사유: {request_reason[0]}, 결정 및 사유: {decision}")
-        #     decision_df = pd.DataFrame(columns=['decision_type', 'rejection_reason'])
-        #     for index, row in decision_df.iterrows():
-        #         try:
-        #             decision_type = row['decision_type']  # DataFrame에서 승인/거절 결과 가져오기
-        #             rejection_reason = row.get('rejection_reason', '')  # DataFrame에서 거절 사유 가져오기 (없으면 빈 문자열)
-
-        #             print(f"Row {index} === 요청사유 결과(승인/거절) : {decision_type}")
-        #             if decision_type == "거절":
-        #                 print(f"거절 사유: {rejection_reason}")
-        #         except KeyError as e:
-        #             print(f"결정 형식을 찾을 수 없습니다. 에러: {e}")
-        #             decision_type = "보류"
         if request_reason:
             decision = request_decision(request_type, request_reason[0])
 
@@ -227,65 +211,49 @@ try:
             if "결정: 승인" in decision:
                 decision_type = "승인"
                 print(" ==== 결정: 승인 ===== ")
+
+                # 승인 버튼 클릭 (텍스트 매칭)
+                approve_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//div[@class='sft-footer']//button[contains(text(), '승인')]"))
+                )
+
+                # 스크롤 해서 보이게
+                driver.execute_script("arguments[0].scrollIntoView(true);", approve_button)
+
+                # 강제 클릭 시도 (click 대신)
+                driver.execute_script("arguments[0].click();", approve_button)
+                
+                time.sleep(3)
+                
+                # 팝업에서 최종 "승인하기" 버튼 클릭
+                final_approve_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//sft-action-request-modal//button[contains(text(), '승인하기')]"))
+                )
+                final_approve_button.click()
+
+                print(f"Row ID {row_id} 승인 완료.")
+
             elif "결정: 거절" in decision:
-                print(" ==== 결정: 거절 ===== ")
+                print(" ==== 결정: 거절 (아무 동작 없이 넘어감) ===== ")
                 decision_type = "거절"
                 rejection_reason = decision.split("- 사유: ")[1] if "- 사유: " in decision else ""
-            
-            # DataFrame을 새로운 행으로 업데이트하려면
+
+                # 거절 버튼 클릭 안 하고 그냥 pass
+                pass
+
+            # DataFrame 업데이트
             new_row = pd.DataFrame({
                 "Row ID": [row_id],
-                "요청 카테고리" : [request_parts],
+                "요청 카테고리": [request_parts],
                 "요청사유": [request_reason[0]],
                 "결정": [decision_type],
                 "거절 사유": [rejection_reason]
             })
 
-            # append 대신 concat을 사용하여 추가
             results_df = pd.concat([results_df, new_row], ignore_index=True)
+            print("======== results_df ========== ", results_df)
 
-            # if decision_type == "승인":
-            #     # 승인 버튼 클릭
-            #     approve_button = WebDriverWait(row, 10).until(
-            #         EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-approve.border-info"))
-            #     )
-            #     approve_button.click()
-
-            #     # 최종 승인 버튼 클릭
-            #     final_approve_button = WebDriverWait(driver, 10).until(
-            #         EC.element_to_be_clickable((By.CSS_SELECTOR, "div.modal-footer button.btn.btn-primary"))
-            #     )
-            #     final_approve_button.click()
-
-            #     print(f"Row ID {row_id} 승인 완료.")
-            # elif decision_type == "거절":
-            #     # 거절 버튼 클릭
-            #     reject_button = WebDriverWait(row, 10).until(
-            #         EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-danger.border-danger.btn-danger"))
-            #     )
-            #     reject_button.click()
-
-            #     # 모달에서 노트 입력란 대기
-            #     modal = WebDriverWait(driver, 10).until(
-            #         EC.presence_of_element_located((By.CSS_SELECTOR, "div.modal-content"))
-            #     )
-            #     note_input = WebDriverWait(modal, 10).until(
-            #         EC.presence_of_element_located((By.CSS_SELECTOR, "textarea[formcontrolname='note']"))
-            #     )
-                
-            #     # 거절 사유 입력
-            #     rejection_reason = decision.split('- 사유: ')[1]  # 거절 사유 추출
-            #     note_input.send_keys(rejection_reason)
-
-            #     # 거절하기 버튼 클릭
-            #     reject_confirm_button = WebDriverWait(modal, 10).until(
-            #         EC.element_to_be_clickable((By.CSS_SELECTOR, "div.modal-footer button.btn.btn-primary"))
-            #     )
-            #     reject_confirm_button.click()
-
-            #     print(f"Row ID {row_id} 거절 완료.")
-            # else:
-            #     print(f"Row ID {row_id}는 보류되었습니다.")
+            
         else:
             print(f"Row ID: {row_id}, 요청 사유를 찾을 수 없습니다.")
 
@@ -293,6 +261,7 @@ try:
         #     EC.element_to_be_clickable((By.CSS_SELECTOR, "button.close"))
         # )
         # close_button.click()
+        
     # 작업 완료 후 데이터프레임 출력
     print("최종 결과 데이터프레임:")
     print(results_df)
