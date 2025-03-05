@@ -16,6 +16,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings 
 from datetime import datetime 
 from langchain.chains import LLMChain 
+from selenium.common.exceptions import StaleElementReferenceException
 
 # os.chdir("/home/shiftee/aws_lambda")
 
@@ -42,8 +43,6 @@ if os.path.exists(vectorstore_path):
 else: 
     raise ValueError("Error :: 벡터 스토어 생성 필요")
 
-# 결과를 저장할 데이터프레임 초기화
-results_df = pd.DataFrame(columns=["Row ID", "요청사유", "결정", "거절 사유"])
 
 # 프롬프트 템플릿 설정
 prompt_template = """
@@ -186,7 +185,9 @@ try:
             try:
                 view_all_button = popup.find_element(By.CLASS_NAME, "sft-view-all-button")
                 if view_all_button.is_displayed():
-                    view_all_button.click()
+                    driver.execute_script("arguments[0].scrollIntoView(true);", view_all_button)
+                    time.sleep(0.5)  # 잠시 대기 후 클릭 시도
+                    driver.execute_script("arguments[0].click();", view_all_button)
                     print("전체보기 버튼 클릭됨")
             except Exception as e:
                 print("전체보기 버튼이 존재하지 않거나 클릭할 수 없음:", e)
@@ -230,28 +231,33 @@ try:
                     EC.element_to_be_clickable((By.XPATH, "//sft-action-request-modal//button[contains(text(), '승인하기')]"))
                 )
                 final_approve_button.click()
+                
 
                 print(f"Row ID {row_id} 승인 완료.")
 
             elif "결정: 거절" in decision:
-                print(" ==== 결정: 거절 (아무 동작 없이 넘어감) ===== ")
+                print(" ==== 결정: 거절 (x 버튼 클릭 시도) ===== ")
                 decision_type = "거절"
                 rejection_reason = decision.split("- 사유: ")[1] if "- 사유: " in decision else ""
 
-                # 거절 버튼 클릭 안 하고 그냥 pass
+                try:
+                    close_buttons = popup.find_elements(By.CSS_SELECTOR, "button.close")
+                    if close_buttons:
+                        driver.execute_script("arguments[0].click();", close_buttons[0])
+                        print("거절 팝업 닫기 완료")
+                    else:
+                        print("거절 팝업 닫기 버튼 없음 (이미 닫힌 상태로 간주)")
+
+                    # 여기서 팝업이 진짜 사라질 때까지 대기 추가
+                    WebDriverWait(driver, 5).until(EC.invisibility_of_element(popup))
+                    print("팝업 완전 종료 확인")
+
+                except Exception as e:
+                    print(f"거절 팝업 닫기 중 에러 발생, 하지만 무시하고 pass: {e}")
+
+                # 무조건 다음으로 넘어가기
                 pass
 
-            # DataFrame 업데이트
-            new_row = pd.DataFrame({
-                "Row ID": [row_id],
-                "요청 카테고리": [request_parts],
-                "요청사유": [request_reason[0]],
-                "결정": [decision_type],
-                "거절 사유": [rejection_reason]
-            })
-
-            results_df = pd.concat([results_df, new_row], ignore_index=True)
-            print("======== results_df ========== ", results_df)
 
             
         else:
@@ -262,13 +268,6 @@ try:
         # )
         # close_button.click()
         
-    # 작업 완료 후 데이터프레임 출력
-    print("최종 결과 데이터프레임:")
-    print(results_df)
-
-    # 파일로 저장
-    results_df.to_excel("request_decision_results.xlsx", index=False)
-    print("모든 작업 완료.")
 
 except TimeoutException:
     print("요소를 찾는 데 시간이 초과되었습니다.")
