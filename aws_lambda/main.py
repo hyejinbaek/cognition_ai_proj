@@ -16,7 +16,8 @@ from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings 
 from datetime import datetime 
 from langchain.chains import LLMChain 
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+
 
 # os.chdir("/home/shiftee/aws_lambda")
 
@@ -103,8 +104,14 @@ chrome_options = Options()
 chrome_options.add_argument("--no-sandbox") 
 chrome_options.add_argument("--disable-dev-shm-usage") 
 # chrome_options.add_argument('--headless')  # 헤드리스 모드 
-driver = webdriver.Chrome(options=chrome_options) 
+driver = webdriver.Chrome(options=chrome_options)
 driver.maximize_window() 
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument('--remote-debugging-port=9222')
+chrome_options.add_argument(
+    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+)
+
 
 try: 
     # 로그인 페이지로 이동
@@ -155,121 +162,84 @@ try:
     dropdown_toggle.click() 
     time.sleep(2) 
 
-    print("요청 테이블 처리 시작")
-    table_rows = WebDriverWait(driver, 10).until(
-        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tbody > tr"))
-    ) 
-    for row in table_rows:
-        row_id = row.find_element(By.CSS_SELECTOR, "input.sft-table-row-checkbox").get_attribute("sft-data-table-row-id")
-        
-        
-        request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
-        request_details = request_detail_element.text.strip()
-        request_parts = split_request_detail(request_details)  # 분리된 요청사항
-        
+    while True:
+        try:
+            print("요청 테이블 처리 시작")
 
-        if len(request_parts) > 0:
-            request_type = split_request_detail(request_details)  # 요청 종류 추출
-            
-            driver.execute_script("arguments[0].click();", request_detail_element)
-
-            popup = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.sft-middle-item"))
+            # 현재 화면에서 최신 row 목록 가져오기
+            table_rows = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tbody > tr"))
             )
 
-            reason_elements = WebDriverWait(popup, 10).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
-            )
-            
-            # 전체보기 버튼이 있다면 클릭
-            try:
-                view_all_button = popup.find_element(By.CLASS_NAME, "sft-view-all-button")
-                if view_all_button.is_displayed():
-                    driver.execute_script("arguments[0].scrollIntoView(true);", view_all_button)
-                    time.sleep(0.5)  # 잠시 대기 후 클릭 시도
-                    driver.execute_script("arguments[0].click();", view_all_button)
-                    print("전체보기 버튼 클릭됨")
-            except Exception as e:
-                print("전체보기 버튼이 존재하지 않거나 클릭할 수 없음:", e)
+            if not table_rows:
+                print("모든 요청을 처리 완료했습니다. 종료합니다.")
+                break  # 남아있는 요청이 없으면 종료
 
-            # 변경된 request_reason 추출
-            reason_elements = WebDriverWait(popup, 10).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
-            )
-
-            request_reason = [
-                element.text.strip()
-                for element in reason_elements
-                if element.is_displayed() and element.text.strip()
-            ]
-
-        if request_reason:
-            decision = request_decision(request_type, request_reason[0])
-
-            print(f"Row ID: {row_id}, 요청사유: {request_reason[0]}, 결정 및 사유: {decision}")
-            decision_type, rejection_reason = "보류", ""
-
-            if "결정: 승인" in decision:
-                decision_type = "승인"
-                print(" ==== 결정: 승인 ===== ")
-
-                # 승인 버튼 클릭 (텍스트 매칭)
-                approve_button = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//div[@class='sft-footer']//button[contains(text(), '승인')]"))
-                )
-
-                # 스크롤 해서 보이게
-                driver.execute_script("arguments[0].scrollIntoView(true);", approve_button)
-
-                # 강제 클릭 시도 (click 대신)
-                driver.execute_script("arguments[0].click();", approve_button)
-                
-                time.sleep(3)
-                
-                # 팝업에서 최종 "승인하기" 버튼 클릭
-                final_approve_button = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//sft-action-request-modal//button[contains(text(), '승인하기')]"))
-                )
-                final_approve_button.click()
-                
-
-                print(f"Row ID {row_id} 승인 완료.")
-
-            elif "결정: 거절" in decision:
-                print(" ==== 결정: 거절 (x 버튼 클릭 시도) ===== ")
-                decision_type = "거절"
-                rejection_reason = decision.split("- 사유: ")[1] if "- 사유: " in decision else ""
-
+            while table_rows:
                 try:
-                    close_buttons = popup.find_elements(By.CSS_SELECTOR, "button.close")
-                    if close_buttons:
-                        driver.execute_script("arguments[0].click();", close_buttons[0])
-                        print("거절 팝업 닫기 완료")
+                    row = table_rows[0]  # 항상 첫 번째 row 선택
+                    row_id = row.find_element(By.CSS_SELECTOR, "input.sft-table-row-checkbox").get_attribute("sft-data-table-row-id")
+                    request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
+                    request_details = request_detail_element.text.strip()
+                    request_type = split_request_detail(request_details)
+
+                    driver.execute_script("arguments[0].click();", request_detail_element)
+
+                    popup = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "div.sft-middle-item"))
+                    )
+
+                    reason_elements = WebDriverWait(popup, 10).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
+                    )
+
+                    request_reason = [
+                        element.text.strip()
+                        for element in reason_elements
+                        if element.is_displayed() and element.text.strip()
+                    ]
+
+                    if request_reason:
+                        decision = request_decision(request_type, request_reason[0])
+                        print(f"Row ID: {row_id}, 요청사유: {request_reason[0]}, 결정 및 사유: {decision}")
+
+                        if "결정: 승인" in decision:
+                            approve_button = WebDriverWait(driver, 10).until(
+                                EC.element_to_be_clickable((By.XPATH, "//div[@class='sft-footer']//button[contains(text(), '승인')]"))
+                            )
+                            driver.execute_script("arguments[0].click();", approve_button)
+                            time.sleep(2)
+
+                            final_approve_button = WebDriverWait(driver, 10).until(
+                                EC.element_to_be_clickable((By.XPATH, "//sft-action-request-modal//button[contains(text(), '승인하기')]"))
+                            )
+                            final_approve_button.click()
+                            print(f"Row ID {row_id} 승인 완료.")
+
+                        elif "결정: 거절" in decision:
+                            try:
+                                close_buttons = popup.find_elements(By.CSS_SELECTOR, "button.close")
+                                if close_buttons:
+                                    driver.execute_script("arguments[0].click();", close_buttons[0])
+                                    print("거절 팝업 닫기 완료")
+                                WebDriverWait(driver, 5).until(EC.invisibility_of_element(popup))
+                                print("팝업 완전 종료 확인")
+                            except Exception as e:
+                                print(f"거절 팝업 닫기 중 에러 발생, 무시하고 pass: {e}")
                     else:
-                        print("거절 팝업 닫기 버튼 없음 (이미 닫힌 상태로 간주)")
+                        print(f"Row ID: {row_id}, 요청 사유를 찾을 수 없습니다.")
 
-                    # 여기서 팝업이 진짜 사라질 때까지 대기 추가
-                    WebDriverWait(driver, 5).until(EC.invisibility_of_element(popup))
-                    print("팝업 완전 종료 확인")
+                    # 현재 row 목록에서 제거
+                    table_rows.pop(0)
 
-                except Exception as e:
-                    print(f"거절 팝업 닫기 중 에러 발생, 하지만 무시하고 pass: {e}")
+                except StaleElementReferenceException:
+                    print("StaleElementReferenceException 발생, 다시 시도합니다.")
+                    break  # 다시 목록을 가져오도록 설정
 
-                # 무조건 다음으로 넘어가기
-                pass
+        except TimeoutException:
+            print("더 이상 요청이 없습니다. 종료합니다.")
+            break  # 남아있는 요청이 없으면 종료
 
 
-            
-        else:
-            print(f"Row ID: {row_id}, 요청 사유를 찾을 수 없습니다.")
-
-        # close_button = WebDriverWait(popup, 10).until(
-        #     EC.element_to_be_clickable((By.CSS_SELECTOR, "button.close"))
-        # )
-        # close_button.click()
-        
-
-except TimeoutException:
-    print("요소를 찾는 데 시간이 초과되었습니다.")
 finally:
     driver.quit()
