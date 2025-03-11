@@ -18,7 +18,6 @@ from datetime import datetime
 from langchain.chains import LLMChain 
 from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 
-
 # os.chdir("/home/shiftee/aws_lambda")
 
 # /var/task
@@ -112,7 +111,6 @@ chrome_options.add_argument(
     "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 )
 
-
 try: 
     # 로그인 페이지로 이동
     print("로그인 시작")
@@ -162,6 +160,9 @@ try:
     dropdown_toggle.click() 
     time.sleep(2) 
 
+    # 거절된 요청 ID 저장
+    rejected_requests = set()
+
     while True:
         try:
             print("요청 테이블 처리 시작")
@@ -175,10 +176,20 @@ try:
                 print("모든 요청을 처리 완료했습니다. 종료합니다.")
                 break  # 남아있는 요청이 없으면 종료
 
-            while table_rows:
+            new_requests_exist = False  # 새로운 요청이 있는지 확인하는 변수
+
+            for row in table_rows:
                 try:
-                    row = table_rows[0]  # 항상 첫 번째 row 선택
                     row_id = row.find_element(By.CSS_SELECTOR, "input.sft-table-row-checkbox").get_attribute("sft-data-table-row-id")
+
+                    # 이미 거절된 요청이라면 건너뛰기
+                    if row_id in rejected_requests:
+                        time.sleep(2)
+                        print(f"Row ID {row_id}는 이미 거절됨. 건너뜁니다.")
+                        continue
+
+                    new_requests_exist = True  # 새로운 요청이 있음을 표시
+
                     request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
                     request_details = request_detail_element.text.strip()
                     request_type = split_request_detail(request_details)
@@ -216,7 +227,16 @@ try:
                             final_approve_button.click()
                             print(f"Row ID {row_id} 승인 완료.")
 
+                            # 승인 후 테이블 다시 새로고침
+                            time.sleep(2)
+                            break  # for 루프 종료 후 다시 table_rows 가져옴
+
                         elif "결정: 거절" in decision:
+                            print(f"Row ID {row_id} 거절됨. 이후 반복 처리 방지를 위해 저장.")
+                            rejected_requests.add(row_id)  # 거절된 요청 저장
+
+                            time.sleep(2)
+                            
                             try:
                                 close_buttons = popup.find_elements(By.CSS_SELECTOR, "button.close")
                                 if close_buttons:
@@ -226,20 +246,29 @@ try:
                                 print("팝업 완전 종료 확인")
                             except Exception as e:
                                 print(f"거절 팝업 닫기 중 에러 발생, 무시하고 pass: {e}")
-                    else:
-                        print(f"Row ID: {row_id}, 요청 사유를 찾을 수 없습니다.")
+                                
+                            time.sleep(2)
 
-                    # 현재 row 목록에서 제거
-                    table_rows.pop(0)
+
+                            continue  # 다음 행으로 이동
+                        
+                    else:
+                        time.sleep(2)
+                        print(f"Row ID: {row_id}, 요청 사유를 찾을 수 없습니다.")
 
                 except StaleElementReferenceException:
                     print("StaleElementReferenceException 발생, 다시 시도합니다.")
                     break  # 다시 목록을 가져오도록 설정
 
+            # 새로운 요청이 없으면 루프 종료
+            if not new_requests_exist:
+                time.sleep(2)
+                print("처리할 새로운 요청이 없습니다. 루프 종료")
+                break  
+
         except TimeoutException:
             print("더 이상 요청이 없습니다. 종료합니다.")
             break  # 남아있는 요청이 없으면 종료
-
 
 
 
