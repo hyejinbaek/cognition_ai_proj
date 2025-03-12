@@ -93,9 +93,9 @@ def handler(event, context):
         - 참고로 회의실 종류에는 '3층', '1층', '2층', '4층', '5층', '로지', 'ROSY', 'CLOVER', '클로버', '우드', 'WOOD', '오션', 'OCEAN' 등 층수 또는 명사형으로 되어있다.
         - 참고로 회의실은 사내 회의실 외 단순히 '외부장소', '자리', '타운홀'과 영어로도 나온다. 그래서 장소는 명사형 및 외부장소, 자리라고 되어있어도 승인해라. 
         - 참고로 회의 참석자에는 사람 이름(예시 : 이승재, 이하우 등), 직급(팀장, 이사, 대표 등)이 등장한다. 둘 중에 하나만 있어도 가능하다.
-    3. (업무)기타업무 : 요청 사유가 설명된 경우 승인.
+    3. (업무)기타업무 : 어떠한 내용이라도 사유가 설명된 경우 승인.
     4. (업무)출장,이동,외근 : 출장 및 외근 장소와 내용이 명시되어 있어야 함.
-    
+
     ### 요청 세부사항
     요청 종류: {request_type}
     요청 사유: {request_reason}
@@ -213,12 +213,11 @@ def handler(event, context):
         table_rows = WebDriverWait(driver, 10).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tbody > tr"))
         ) 
-        rows = []
+
         row_id = ""
         
         # 거절된 요청 ID 저장
         rejected_requests = set()
-
         
         while True:
             try:
@@ -228,25 +227,26 @@ def handler(event, context):
                 table_rows = WebDriverWait(driver, 10).until(
                     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tbody > tr"))
                 )
-
+                
                 if not table_rows:
                     print("모든 요청을 처리 완료했습니다. 종료합니다.")
                     break  # 남아있는 요청이 없으면 종료
-                
+
                 new_requests_exist = False  # 새로운 요청이 있는지 확인하는 변수
 
-                while table_rows:
+
+                for row in table_rows:
                     try:
                         row_id = row.find_element(By.CSS_SELECTOR, "input.sft-table-row-checkbox").get_attribute("sft-data-table-row-id")
-
+                        
                         # 이미 거절된 요청이라면 건너뛰기
                         if row_id in rejected_requests:
                             time.sleep(2)
                             print(f"Row ID {row_id}는 이미 거절됨. 건너뜁니다.")
                             continue
-
-                        new_requests_exist = True  # 새로운 요청이 있음을 표시
-
+                        
+                        new_requests_exist = True # 새로운 요청이 있음을 표시
+                        
                         request_detail_element = row.find_element(By.CSS_SELECTOR, "td.sft-request-tags-table div.sft-request-detail")
                         request_details = request_detail_element.text.strip()
                         request_type = split_request_detail(request_details)
@@ -282,11 +282,11 @@ def handler(event, context):
                                     EC.element_to_be_clickable((By.XPATH, "//sft-action-request-modal//button[contains(text(), '승인하기')]"))
                                 )
                                 final_approve_button.click()
-                                print(f"Row ID {row_id} 승인 완료.")
-
-                                # 승인 후 테이블 다시 새로고침
                                 time.sleep(2)
-                                break  # for 루프 종료 후 다시 table_rows 가져옴
+                                print(f"Row ID {row_id} 승인 완료.")
+                                
+                                time.sleep(2)
+                                break
 
                             elif "결정: 거절" in decision:
                                 print(f"Row ID {row_id} 거절됨. 이후 반복 처리 방지를 위해 저장.")
@@ -303,13 +303,7 @@ def handler(event, context):
                                     print("팝업 완전 종료 확인")
                                 except Exception as e:
                                     print(f"거절 팝업 닫기 중 에러 발생, 무시하고 pass: {e}")
-                                    
-                                time.sleep(2)
-
-
-                                continue  # 다음 행으로 이동
                         else:
-                            time.sleep(2)
                             print(f"Row ID: {row_id}, 요청 사유를 찾을 수 없습니다.")
                             request_reason.append(None)  # 요청 사유가 없을 경우 None 추가
                             decision = "보류"  # 기본 결정은 보류
