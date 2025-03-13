@@ -16,7 +16,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.output_parsers import StrOutputParser 
 from langchain_core.prompts import PromptTemplate 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings 
-from datetime import datetime 
+from datetime import datetime, timezone, timedelta
 from langchain.chains import LLMChain 
 import json
 from io import StringIO, BytesIO
@@ -133,7 +133,7 @@ def handler(event, context):
         decision_text = decision.content.strip()  
         return decision_text
 
-    # ✅ Lambda 환경에서 반드시 필요한 옵션들
+    # # ✅ Lambda 환경에서 반드시 필요한 옵션들
     # chrome_options = Options()
     # chrome_options.add_argument("--headless")
     # chrome_options.add_argument("--no-sandbox")
@@ -213,7 +213,7 @@ def handler(event, context):
         table_rows = WebDriverWait(driver, 10).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tbody > tr"))
         ) 
-
+        rows = []
         row_id = ""
         
         # 거절된 요청 ID 저장
@@ -232,17 +232,23 @@ def handler(event, context):
                     print("모든 요청을 처리 완료했습니다. 종료합니다.")
                     break  # 남아있는 요청이 없으면 종료
 
+                if row_id in rows:
+                    break # 이미 진행했던 건이면 종료
+                rows.append(row_id)
+
                 new_requests_exist = False  # 새로운 요청이 있는지 확인하는 변수
 
 
                 for row in table_rows:
                     try:
+                        decision_type = ""
+                        rejection_reason = ""
                         row_id = row.find_element(By.CSS_SELECTOR, "input.sft-table-row-checkbox").get_attribute("sft-data-table-row-id")
                         
                         # 이미 거절된 요청이라면 건너뛰기
                         if row_id in rejected_requests:
-                            time.sleep(2)
                             print(f"Row ID {row_id}는 이미 거절됨. 건너뜁니다.")
+                            time.sleep(2)
                             continue
                         
                         new_requests_exist = True # 새로운 요청이 있음을 표시
@@ -252,10 +258,20 @@ def handler(event, context):
                         request_type = split_request_detail(request_details)
 
                         driver.execute_script("arguments[0].click();", request_detail_element)
-
+                        time.sleep(2)
                         popup = WebDriverWait(driver, 10).until(
                             EC.presence_of_element_located((By.CSS_SELECTOR, "div.sft-middle-item"))
                         )
+                        
+                        # 전체보기 버튼이 있다면 클릭
+                        try:
+                            view_all_button = popup.find_element(By.CLASS_NAME, "sft-view-all-button")
+                            if view_all_button.is_displayed():
+                                view_all_button.click()
+                                # print("전체보기 버튼 클릭됨")
+                        except Exception as e:
+                            print("전체보기 버튼이 존재하지 않거나 클릭할 수 없음:", e)
+
 
                         reason_elements = WebDriverWait(popup, 10).until(
                             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sft-note"))
@@ -266,6 +282,8 @@ def handler(event, context):
                             for element in reason_elements
                             if element.is_displayed() and element.text.strip()
                         ]
+
+                        # time.sleep(1)
 
                         if request_reason:
                             decision = request_decision(request_type, request_reason[0])
@@ -284,13 +302,16 @@ def handler(event, context):
                                 final_approve_button.click()
                                 time.sleep(2)
                                 print(f"Row ID {row_id} 승인 완료.")
-                                
+                                decision_type = "승인"
+                              
                                 time.sleep(2)
-                                break
+                                # break
 
                             elif "결정: 거절" in decision:
                                 print(f"Row ID {row_id} 거절됨. 이후 반복 처리 방지를 위해 저장.")
                                 rejected_requests.add(row_id)  # 거절된 요청 저장
+                                rejection_reason = decision.split("- 사유: ")[1] if "- 사유: " in decision else ""
+                                decision_type = "거절"
 
                                 time.sleep(2)
                                 
@@ -303,12 +324,30 @@ def handler(event, context):
                                     print("팝업 완전 종료 확인")
                                 except Exception as e:
                                     print(f"거절 팝업 닫기 중 에러 발생, 무시하고 pass: {e}")
+
                         else:
                             print(f"Row ID: {row_id}, 요청 사유를 찾을 수 없습니다.")
                             request_reason.append(None)  # 요청 사유가 없을 경우 None 추가
-                            decision = "보류"  # 기본 결정은 보류
                             decision_type = "보류"
-                            rejection_reason = ""
+
+                        #S3 결과 기록
+                        # timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        kst = timezone(timedelta(hours=9))
+
+                        # KST 기준 현재 시간
+                        timestamp = datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
+
+                        # ✅ 기존 데이터프레임에 추가
+                        new_row = pd.DataFrame({
+                            "Row ID": [row_id],
+                            "요청 카테고리": [request_type],
+                            "요청사유": [request_reason[0]],
+                            "결정": [decision_type],
+                            "거절 사유": [rejection_reason],
+                            "저장 시간": [timestamp]
+                        })
+
+                        results_df = pd.concat([results_df, new_row], ignore_index=True)
 
 
                     except StaleElementReferenceException:
@@ -324,20 +363,6 @@ def handler(event, context):
             except TimeoutException:
                 print("더 이상 요청이 없습니다. 종료합니다.")
                 break  # 남아있는 요청이 없으면 종료
-
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # ✅ 기존 데이터프레임에 추가
-        new_row = pd.DataFrame({
-            "Row ID": [row_id],
-            "요청 카테고리": [request_type],
-            "요청사유": [request_reason[0]],
-            "결정": [decision_type],
-            "거절 사유": [rejection_reason],
-            "저장 시간": [timestamp]
-        })
-
-        results_df = pd.concat([results_df, new_row], ignore_index=True)
             
         save_to_s3(results_df)
 
