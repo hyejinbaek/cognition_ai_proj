@@ -114,7 +114,7 @@ def handler(event, context):
         return request_detail
 
 
-    # request_decision 함수를 수정하여 요청사유의 첫 번째 요소만 사용하도록 수정합니다.
+    # request_decision 함수를 수정하여 요청사유의 첫 번째 요소만 사용하도록 수정
     def request_decision(request_type, request_reason):
         search_results = vectorstore.similarity_search(request_reason, k=3, distance_metric='cosine')
         context = "\n".join([result.page_content for result in search_results])
@@ -140,7 +140,7 @@ def handler(event, context):
     # service = Service(executable_path="/opt/chromedriver")
     # driver = webdriver.Chrome(service=service, options=chrome_options)
 
-    # ✅ Lambda 환경에서 반드시 필요한 옵션들
+    # ✅ 로컬 환경
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
     driver = webdriver.Chrome(options=chrome_options)
